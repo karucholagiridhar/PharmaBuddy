@@ -1,0 +1,10 @@
+STEP 1: OPEN TERMINAL / COMMAND PROMPT
+----------------------------------------
+
+cd "c:/projects/PHARMA/pharmEZ-main/pharmEZ-main"
+
+python -m venv venv
+
+pip install -r requirements.txt
+
+python app.py

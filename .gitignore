@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+credentials.json
+venv/
+.vscode/
+instance/
+data/input/*
+data/processed/*
+!data/input/.gitkeep
+!data/processed/.gitkeep

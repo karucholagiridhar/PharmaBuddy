@@ -1,0 +1,308 @@
+{% extends "base.html" %}
+{% block page_label %}Pharmacy Locator{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+  .locator-panel { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .loc-section-label { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+  .radius-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .radius-pill { padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); font-size: 11px; font-family: 'DM Mono', monospace;
+    cursor: pointer; transition: all 0.2s; }
+  .radius-pill:hover { border-color: rgba(0,201,167,0.35); color: var(--teal); }
+  .radius-pill.active { background: rgba(0,201,167,0.12); border-color: var(--teal); color: var(--teal); }
+  .pharm-result-count { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace;
+    padding: 6px 0; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+  @keyframes inputShake {
+    0%,100% { transform: translateX(0); }
+    20%,60% { transform: translateX(-6px); }
+    40%,80% { transform: translateX(6px); }
+  }
+  .input-shake { animation: inputShake 0.35s ease; border-color: #e05c5c !important; }
+</style>
+{% endblock %}
+{% block content %}
+
+<div class="section-title">Pharmacy Locator</div>
+<div class="section-sub">Find nearby pharmacies using OpenStreetMap · No API key required</div>
+
+<div class="locator-layout">
+  <!-- ══ LEFT panel ══ -->
+  <div class="ez-card reveal" style="padding:0;overflow:hidden;display:flex;flex-direction:column;">
+    <div class="locator-panel" style="flex-shrink:0;">
+      <!-- Radius picker (pill style) -->
+      <div>
+        <div class="loc-section-label">Search Radius</div>
+        <div class="radius-pills" id="radiusPills">
+          <button class="radius-pill" data-val="1000" onclick="setRadius(this)">1 km</button>
+          <button class="radius-pill active" data-val="5000" onclick="setRadius(this)">5 km</button>
+          <button class="radius-pill" data-val="10000" onclick="setRadius(this)">10 km</button>
+        </div>
+        <input type="hidden" id="radius" value="5000">
+      </div>
+
+      <!-- Address input -->
+      <div>
+        <div class="loc-section-label">Search by Address</div>
+        <div style="position:relative;">
+          <input type="text" id="locationInput" class="ez-input"
+                 placeholder="Enter city, area or address..." style="padding-right:40px;">
+          <button onclick="clearSearch()" id="clearBtn"
+                  style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;display:none;">×</button>
+        </div>
+      </div>
+
+      <button class="btn-teal" style="width:100%;justify-content:center;" onclick="searchLocation()" id="searchBtn">
+        <span class="btn-label">🔍 Search Location</span>
+        <span class="btn-spinner"></span>
+      </button>
+      <div style="text-align:center;color:var(--muted);font-size:11px;font-family:'DM Mono',monospace;">— OR —</div>
+      <button class="btn-ghost" style="width:100%;justify-content:center;" onclick="searchGPS()" id="gpsBtn">
+        📍 Use Current GPS
+      </button>
+
+      <!-- Status bar -->
+      <div class="search-status" id="statusBar">
+        <div class="search-status-dot"></div>
+        <span id="statusText">Enter a location or use GPS to search</span>
+      </div>
+    </div>
+
+    <hr class="ez-divider" style="margin: 0;">
+    <div id="resultsList" class="pharmacy-list" style="padding:8px 12px;flex:1;">
+      <div class="empty-state" style="padding:28px 16px;">
+        <span class="empty-state-icon" style="font-size:32px;">🗺️</span>
+        <p>Enter a location or use GPS to find nearby pharmacies.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ RIGHT: Map ══ -->
+  <div class="ez-card reveal" style="padding:0;overflow:hidden;">
+    <div id="map"></div>
+  </div>
+</div>
+
+<!-- GPS Prompt Modal -->
+<div class="modal fade" id="gpsPromptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header" style="border:none;">
+        <h5 class="modal-title">Use Current Location?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body text-center py-4">
+        <div style="font-size:40px;margin-bottom:12px;">📍</div>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">No location entered. Use your device's GPS instead?</p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          <button type="button" class="btn-ghost" data-bs-dismiss="modal">No, thanks</button>
+          <button type="button" class="btn-teal" id="useGpsBtn" style="padding:8px 20px;">Yes, Use GPS</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+let map = null, markers = [], userMarker = null, gpsInProgress = false;
+
+function setStatus(text, state = '') {
+  const bar = document.getElementById('statusBar');
+  const txt = document.getElementById('statusText');
+  bar.className = 'search-status' + (state ? ' ' + state : '');
+  txt.textContent = text;
+}
+
+function setRadius(btn) {
+  document.querySelectorAll('.radius-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('radius').value = btn.dataset.val;
+}
+
+function clearSearch() {
+  document.getElementById('locationInput').value = '';
+  document.getElementById('clearBtn').style.display = 'none';
+}
+
+function initMap() {
+  map = L.map('map').setView([20.5937, 78.9629], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+
+  const gpsModalEl = document.getElementById('gpsPromptModal');
+  if (gpsModalEl) {
+    const gpsModal = new bootstrap.Modal(gpsModalEl);
+    document.getElementById('useGpsBtn').addEventListener('click', () => { gpsModal.hide(); searchGPS(); });
+    window.gpsPromptModal = gpsModal;
+
+    // When modal is dismissed without choosing GPS, restore status and clean up any stray backdrop
+    gpsModalEl.addEventListener('hidden.bs.modal', () => {
+      document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+      // Only reset to default if no specific error/search is active
+      const bar = document.getElementById('statusBar');
+      if (!gpsInProgress && !bar.classList.contains('searching') && !bar.classList.contains('error')) {
+        setStatus('Enter a location or use GPS to search', '');
+      }
+    });
+  }
+
+  document.getElementById('locationInput').addEventListener('keypress', e => {
+    if (e.key === 'Enter') { e.preventDefault(); searchLocation(); }
+  });
+  document.getElementById('locationInput').addEventListener('input', function() {
+    document.getElementById('clearBtn').style.display = this.value ? 'block' : 'none';
+  });
+});
+
+function searchGPS() {
+  if (gpsInProgress) { setStatus('GPS request already in progress...'); return; }
+  if (!navigator.geolocation) { setStatus('Geolocation not supported.', 'error'); return; }
+  gpsInProgress = true;
+  setStatus('Locating you...', 'searching');
+  const gpsBtn = document.getElementById('gpsBtn');
+  gpsBtn.disabled = true;
+
+  const timeout = setTimeout(() => {
+    gpsInProgress = false; gpsBtn.disabled = false;
+    setStatus('Location timed out. Try entering a city name.', 'error');
+    if (window.gpsPromptModal) window.gpsPromptModal.hide();
+  }, 10000);
+
+  navigator.geolocation.getCurrentPosition(pos => {
+    clearTimeout(timeout); gpsInProgress = false; gpsBtn.disabled = false;
+    if (window.gpsPromptModal) window.gpsPromptModal.hide();
+    executeSearch({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+  }, (err) => {
+    clearTimeout(timeout); gpsInProgress = false; gpsBtn.disabled = false;
+    if (window.gpsPromptModal) window.gpsPromptModal.hide();
+    const msgs = { 1: 'Enable location permission in browser settings.', 2: 'Location unavailable. Enter a city name.', 3: 'GPS timed out. Try again.' };
+    setStatus(msgs[err.code] || 'Unable to get location.', 'error');
+  }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 });
+}
+
+function searchLocation() {
+  const input = document.getElementById('locationInput');
+  const loc = input.value.trim();
+  if (!loc) {
+    setStatus('Please enter a location name first.', 'error');
+    input.focus();
+    input.classList.remove('input-shake');
+    void input.offsetWidth; // reflow to restart animation
+    input.classList.add('input-shake');
+    setTimeout(() => input.classList.remove('input-shake'), 400);
+    return;
+  }
+  executeSearch({ location: loc });
+}
+
+async function executeSearch(payload) {
+  const list    = document.getElementById('resultsList');
+  const searchBtn = document.getElementById('searchBtn');
+  payload.radius  = document.getElementById('radius').value;
+
+  setStatus('Searching pharmacies...', 'searching');
+  searchBtn.classList.add('btn-loading');
+  searchBtn.disabled = true;
+
+  // Skeleton loading
+  list.innerHTML = [1,2,3].map(() => `
+    <div style="padding:12px;margin-bottom:8px;">
+      <div class="skeleton skel-line" style="width:70%;margin-bottom:6px;"></div>
+      <div class="skeleton skel-line" style="width:90%;"></div>
+    </div>`).join('');
+
+  try {
+    const res  = await fetch('/api/pharmacy/search', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `Error ${res.status}`); }
+    const data    = await res.json();
+    const results = Array.isArray(data.results) ? data.results : [];
+    const center  = data.center;
+    if (!center || typeof center.lat !== 'number') throw new Error('Invalid location');
+
+    map.setView([center.lat, center.lng], 14);
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.marker([center.lat, center.lng]).addTo(map).bindPopup('<b>Your search location</b>').openPopup();
+    markers.forEach(m => map.removeLayer(m)); markers = [];
+    list.innerHTML = '';
+
+    if (results.length > 0) {
+      list.innerHTML = `<div class="pharm-result-count">Found ${results.length} pharmacies nearby</div>`;
+      const bounds = L.latLngBounds();
+      bounds.extend([center.lat, center.lng]);
+
+      results.forEach((p, idx) => {
+        if (!p.latitude || !p.longitude || !p.name || !p.address) return;
+        const lat = parseFloat(p.latitude), lng = parseFloat(p.longitude);
+        if (isNaN(lat) || isNaN(lng)) return;
+
+        const nameEl = document.createElement('div'); nameEl.textContent = p.name;
+        const addrEl = document.createElement('div'); addrEl.textContent = p.address;
+        const safeName = nameEl.innerHTML, safeAddr = addrEl.innerHTML;
+        const distKm   = (p.distance / 1000).toFixed(1);
+        const originParam = center ? `&origin=${center.lat},${center.lng}` : '';
+
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'pharm-item';
+        itemDiv.style.animationDelay = (idx * 0.05) + 's';
+        itemDiv.onclick = () => focusOnMap(lat, lng);
+        itemDiv.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
+            <div class="pharm-name">${safeName}</div>
+            <span class="ez-tag tag-teal" style="flex-shrink:0;margin-left:8px;">${distKm} km</span>
+          </div>
+          <div class="pharm-addr">📍 ${safeAddr}</div>
+          <a href="https://www.google.com/maps/dir/?api=1${originParam}&destination=${lat},${lng}"
+             target="_blank" class="btn-ghost" style="font-size:11px;padding:4px 12px;margin-top:6px;"
+             onclick="event.stopPropagation()">🧭 Navigate</a>`;
+        list.appendChild(itemDiv);
+
+        const marker = L.marker([lat, lng]).addTo(map).bindPopup(`
+          <div style="font-family:'Syne',sans-serif;min-width:160px;">
+            <div style="font-weight:700;font-size:13px;color:#00C9A7;margin-bottom:4px;">${safeName}</div>
+            <div style="font-size:11px;color:#8892B0;margin-bottom:8px;">${safeAddr}</div>
+            <a href="https://www.google.com/maps/dir/?api=1${originParam}&destination=${lat},${lng}"
+               target="_blank" style="display:block;background:#00C9A7;color:#0A1628;padding:6px;border-radius:6px;text-align:center;font-size:12px;font-weight:700;text-decoration:none;">🧭 Navigate</a>
+          </div>`);
+        markers.push(marker);
+        bounds.extend([lat, lng]);
+      });
+      if (results.length > 1) map.fitBounds(bounds, {padding: [50,50]});
+      setStatus(`Found ${results.length} pharmacies in range`, 'found');
+    } else {
+      list.innerHTML = '<div class="empty-state" style="padding:32px;"><span class="empty-state-icon" style="font-size:32px;">🔍</span><p>No pharmacies found. Try a larger radius.</p></div>';
+      setStatus('No results found', 'error');
+    }
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state" style="padding:24px;"><span class="empty-state-icon" style="font-size:32px;">⚠️</span><p>${e.message || 'Search failed. Try again.'}</p></div>`;
+    setStatus(e.message || 'Search failed', 'error');
+  } finally {
+    searchBtn.classList.remove('btn-loading');
+    searchBtn.disabled = false;
+  }
+}
+
+function focusOnMap(lat, lng) {
+  map.setView([lat, lng], 16);
+  markers.forEach(m => {
+    if (Math.abs(m.getLatLng().lat - lat) < 0.0001 && Math.abs(m.getLatLng().lng - lng) < 0.0001) m.openPopup();
+  });
+}
+</script>
+{% endblock %}

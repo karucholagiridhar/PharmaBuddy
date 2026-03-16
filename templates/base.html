@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PharmaBuddy — Smart Medication Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}">
+  {% block head %}{% endblock %}
+</head>
+<body data-theme="{{ session.get('theme', 'dark') }}">
+
+
+<!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="flash-container" id="flashContainer">
+      {% for category, message in messages %}
+        <div class="flash-toast {{ category }}">
+          <span>{% if category == 'success' %}✅{% elif category == 'danger' %}❌{% elif category == 'warning' %}⚠️{% else %}ℹ️{% endif %}</span>
+          <span>{{ message }}</span>
+          <button class="flash-close" onclick="this.parentElement.remove()">×</button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+
+{% if session.get('user') %}
+<!-- ===== SIDEBAR ===== -->
+<nav class="sidebar" id="sidebar">
+  <a href="{{ url_for('dashboard') }}" class="logo-mark">
+    <svg width="30" height="28" viewBox="0 0 30 28" fill="none">
+      <!-- Heart silhouette -->
+      <path d="M15 26C15 26 2 17 2 9C2 5.7 4.7 3 8 3C10.4 3 12.5 4.4 13.8 6.4L15 8L16.2 6.4C17.5 4.4 19.6 3 22 3C25.3 3 28 5.7 28 9C28 17 15 26 15 26Z"
+        fill="rgba(255,255,255,0.18)" stroke="rgba(255,255,255,0.7)" stroke-width="1.4" stroke-linejoin="round"/>
+      <!-- ECG: flat → P wave → QRS spike → T wave → flat -->
+      <polyline
+        points="0,14 4,14 5.5,11 7,14 8.5,14 9.5,17 10.5,3 11.5,22 12.5,14 14.5,14 16,9 17.5,9 18.5,14 22,14 30,14"
+        stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </a>
+
+  <!-- Active indicator pill (JS positions it) -->
+  <div class="sidebar-active-pill" id="sidebarPill"></div>
+
+  <div class="nav-items" id="navItems">
+    <a href="{{ url_for('dashboard') }}"
+       class="nav-btn {% if request.endpoint == 'dashboard' %}active{% endif %}"
+       id="nav-dashboard" data-nav="dashboard">
+      <span class="nav-icon">📋</span><span class="nav-label">Dashboard</span>
+    </a>
+    <a href="{{ url_for('medications') }}"
+       class="nav-btn {% if request.endpoint == 'medications' %}active{% endif %}"
+       id="nav-medications" data-nav="medications">
+      <span class="nav-icon">💊</span><span class="nav-label">Medications</span>
+    </a>
+    <a href="{{ url_for('pharmacy') }}"
+       class="nav-btn {% if request.endpoint == 'pharmacy' %}active{% endif %}"
+       id="nav-pharmacy" data-nav="pharmacy">
+      <span class="nav-icon">📍</span><span class="nav-label">Pharmacy</span>
+    </a>
+    <a href="{{ url_for('safety') }}"
+       class="nav-btn {% if request.endpoint == 'safety' %}active{% endif %}"
+       id="nav-safety" data-nav="safety">
+      <span class="nav-icon">🛡️</span><span class="nav-label">OTC Safety</span>
+    </a>
+  </div>
+
+  <div class="nav-bottom">
+    <a href="{{ url_for('profile') }}"
+       class="nav-btn {% if request.endpoint == 'profile' %}active{% endif %}"
+       id="nav-profile" data-nav="profile">
+      <span class="nav-icon">👤</span><span class="nav-label">Profile</span>
+    </a>
+    <a href="{{ url_for('logout') }}" class="logout-btn">
+      <span class="nav-icon">🚪</span><span class="nav-label">Logout</span>
+    </a>
+  </div>
+</nav>
+
+<!-- ===== MAIN WRAPPER ===== -->
+<div class="main-wrapper">
+  <div class="topbar">
+    <div class="page-title">
+      Pharma<span class="accent">Buddy</span>
+      <span class="breadcrumb-sep">/ {% block page_label %}App{% endblock %}</span>
+    </div>
+    <div class="topbar-right">
+      <span class="today-date" id="topbarDate"></span>
+      <span class="notif-bell" id="notifBell" title="Notifications">
+        🔔<span class="notif-dot" id="notifDot"></span>
+      </span>
+      <div class="notif-panel" id="notifPanel">
+        <div class="notif-header">
+          <span class="notif-header-title">Notifications</span>
+          <span class="notif-header-sub" id="notifCount"></span>
+        </div>
+        <div class="notif-list" id="notifList">
+          <div class="notif-loading">Loading…</div>
+        </div>
+      </div>
+      <a href="{{ url_for('profile') }}" class="user-chip" style="text-decoration:none;">
+        {% if session.get('avatar') %}
+          <img src="{{ session.get('avatar') }}" class="avatar avatar-img" alt="avatar">
+        {% else %}
+          <div class="avatar">{{ (session.get('display_name') or session.get('user', 'U'))[:2].upper() }}</div>
+        {% endif %}
+        <span>{{ session.get('display_name') or session.get('user') }}</span>
+      </a>
+    </div>
+  </div>
+  <div class="page-content">
+{% endif %}
+
+{% block content %}{% endblock %}
+
+{% if session.get('user') %}
+  </div><!-- end page-content -->
+</div><!-- end main-wrapper -->
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-nav">
+  <a href="{{ url_for('dashboard') }}" class="mobile-nav-btn {% if request.endpoint == 'dashboard' %}active{% endif %}">
+    <span class="mobile-nav-icon">📋</span>
+    <span class="mobile-nav-label">Home</span>
+  </a>
+  <a href="{{ url_for('medications') }}" class="mobile-nav-btn {% if request.endpoint == 'medications' %}active{% endif %}">
+    <span class="mobile-nav-icon">💊</span>
+    <span class="mobile-nav-label">Meds</span>
+  </a>
+  <a href="{{ url_for('pharmacy') }}" class="mobile-nav-btn {% if request.endpoint == 'pharmacy' %}active{% endif %}">
+    <span class="mobile-nav-icon">📍</span>
+    <span class="mobile-nav-label">Pharmacy</span>
+  </a>
+  <a href="{{ url_for('safety') }}" class="mobile-nav-btn {% if request.endpoint == 'safety' %}active{% endif %}">
+    <span class="mobile-nav-icon">🛡️</span>
+    <span class="mobile-nav-label">Safety</span>
+  </a>
+  <a href="{{ url_for('profile') }}" class="mobile-nav-btn {% if request.endpoint == 'profile' %}active{% endif %}">
+    {% if session.get('avatar') %}
+      <img src="{{ session.get('avatar') }}" class="mobile-nav-avatar">
+    {% else %}
+      <span class="mobile-nav-icon">👤</span>
+    {% endif %}
+    <span class="mobile-nav-label">Profile</span>
+  </a>
+</nav>
+{% endif %}
+
+<!-- Global Loader -->
+<div class="global-loader" id="globalLoader">
+  <div class="loader-ring"></div>
+  <div class="loader-title" id="loaderTitle">Processing...</div>
+  <div class="loader-sub"   id="loaderSub">Please wait</div>
+  <div class="loader-steps" id="loaderSteps"></div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* ============================================================
+   PharmaBuddy — Base Runtime JS
+   ============================================================ */
+
+// ── Topbar date ────────────────────────────────────────────────
+const _d = new Date();
+const _el = document.getElementById('topbarDate');
+if (_el) _el.textContent = '📅 ' + _d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+// ── Sidebar active pill ────────────────────────────────────────
+(function positionSidebarPill() {
+  const pill   = document.getElementById('sidebarPill');
+  const active = document.querySelector('.nav-btn.active');
+  if (pill && active) {
+    const sidebar  = document.getElementById('sidebar');
+    const sRect    = sidebar.getBoundingClientRect();
+    const aRect    = active.getBoundingClientRect();
+    const top      = aRect.top - sRect.top + (aRect.height / 2) - 14;
+    pill.style.top = top + 'px';
+  }
+
+  // Re-position on nav click
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      if (!pill) return;
+      const sRect = document.getElementById('sidebar').getBoundingClientRect();
+      const bRect = this.getBoundingClientRect();
+      pill.style.top = (bRect.top - sRect.top + bRect.height / 2 - 14) + 'px';
+    });
+  });
+})();
+
+
+// ── Auto-dismiss flash toasts ──────────────────────────────────
+setTimeout(() => {
+  document.querySelectorAll('.flash-toast').forEach(t => {
+    t.style.transition = 'opacity 0.4s, transform 0.4s';
+    t.style.opacity    = '0';
+    t.style.transform  = 'translateX(40px)';
+    setTimeout(() => t.remove(), 400);
+  });
+}, 4200);
+
+// ── Global loader ──────────────────────────────────────────────
+const _loaderStepDefs = {
+  'Analyzing Prescription': [
+    'Reading file contents...',
+    'Running vision AI...',
+    'Extracting medicines...',
+    'Saving to database...'
+  ]
+};
+
+window.showLoader = function(title = 'Processing...', subtitle = 'Please wait') {
+  document.getElementById('loaderTitle').textContent = title;
+  document.getElementById('loaderSub').textContent   = subtitle;
+
+  const stepsEl = document.getElementById('loaderSteps');
+  const steps   = _loaderStepDefs[title] || [];
+  stepsEl.innerHTML = '';
+  steps.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'loader-step';
+    div.innerHTML = `<span class="ls-dot"></span>${s}`;
+    div.id = 'ls-' + i;
+    stepsEl.appendChild(div);
+  });
+
+  document.getElementById('globalLoader').classList.add('show');
+
+  // Animate steps
+  if (steps.length) {
+    let idx = 0;
+    const tick = () => {
+      if (idx > 0 && document.getElementById('ls-' + (idx - 1))) {
+        document.getElementById('ls-' + (idx - 1)).classList.remove('active');
+      }
+      if (document.getElementById('ls-' + idx)) {
+        document.getElementById('ls-' + idx).classList.add('active');
+      }
+      idx++;
+      if (idx < steps.length) setTimeout(tick, 1800);
+    };
+    setTimeout(tick, 400);
+  }
+};
+
+window.hideLoader = function() {
+  document.getElementById('globalLoader').classList.remove('show');
+};
+
+// ── Scroll reveal ──────────────────────────────────────────────
+(function initScrollReveal() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); }
+    });
+  }, { threshold: 0.08 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+})();
+
+// ── Notification bell ──────────────────────────────────────────
+(function initNotifications() {
+  const bell  = document.getElementById('notifBell');
+  const panel = document.getElementById('notifPanel');
+  if (!bell || !panel) return;
+
+  const list  = document.getElementById('notifList');
+  const dot   = document.getElementById('notifDot');
+  const count = document.getElementById('notifCount');
+  let open = false, loaded = false;
+
+  bell.addEventListener('click', (e) => {
+    e.stopPropagation();
+    open = !open;
+    panel.classList.toggle('open', open);
+    if (open && !loaded) { loaded = true; fetchNotifications(); }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (open && !panel.contains(e.target) && e.target !== bell) {
+      open = false; panel.classList.remove('open');
+    }
+  });
+
+  async function fetchNotifications() {
+    try {
+      const res  = await fetch('/api/notifications');
+      const data = await res.json();
+      renderItems(data.notifications || []);
+      const unread = data.count || 0;
+      dot.style.display = unread > 0 ? 'block' : 'none';
+      count.textContent  = unread > 0 ? `${unread} unread` : 'all clear';
+    } catch {
+      list.innerHTML = '<div class="notif-empty">Could not load notifications.</div>';
+    }
+  }
+
+  function renderItems(items) {
+    if (!items.length) {
+      list.innerHTML = '<div class="notif-empty">No medications scheduled today.</div>';
+      return;
+    }
+    list.innerHTML = items.map(n => `
+      <div class="notif-item notif-${n.type}">
+        <span class="notif-icon">${n.icon}</span>
+        <div class="notif-content">
+          <div class="notif-title">${n.title}</div>
+          <div class="notif-body">${n.body}</div>
+        </div>
+        <span class="notif-time">${n.time}</span>
+      </div>`).join('');
+  }
+
+  // Auto-refresh dot count every 2 min without opening panel
+  setInterval(async () => {
+    if (open) return;
+    try {
+      const res  = await fetch('/api/notifications');
+      const data = await res.json();
+      dot.style.display = (data.count || 0) > 0 ? 'block' : 'none';
+    } catch {}
+  }, 120000);
+})();
+</script>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-analytics.js";
+  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyB1C9EnaT-VvxugacsZGtOJp7ayYSAVMGM",
+    authDomain: "pharmabuddy-b6b1b.firebaseapp.com",
+    projectId: "pharmabuddy-b6b1b",
+    storageBucket: "pharmabuddy-b6b1b.firebasestorage.app",
+    messagingSenderId: "484223619244",
+    appId: "1:484223619244:web:ea248dafe5c04533334f09",
+    measurementId: "G-3QCVP9VW87"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const auth = getAuth(app);
+
+  // When Firebase detects a logged-in user, store their email for notifications
+  onAuthStateChanged(auth, (user) => {
+    if (user && user.email) {
+      window._firebaseUserEmail = user.email;
+    }
+  });
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

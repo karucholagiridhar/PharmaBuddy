@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block page_label %}OTC Safety{% endblock %}
+{% block content %}
+
+<div class="section-title">Medication Safety</div>
+<div class="section-sub">Check Over-The-Counter medicines for safety, usage, and drug interactions.</div>
+
+<!-- Search bar -->
+<form method="GET" id="safetyForm" onsubmit="showLoader('Checking Safety','Scanning OTC database...')">
+  <div class="otc-search-wrap">
+    <span class="otc-search-icon">🔍</span>
+    <input type="text" name="q" class="ez-input otc-input"
+           placeholder="Search medicine by name, e.g. Paracetamol, Aspirin..."
+           value="{{ query if query }}" id="searchInput" autocomplete="off">
+  </div>
+  <div style="display:flex;justify-content:center;margin-bottom:28px;">
+    <button type="submit" class="btn-teal" style="padding:10px 36px;">
+      Search Medicine
+    </button>
+    {% if query %}
+    <a href="{{ url_for('safety') }}" class="btn-ghost" style="margin-left:10px;padding:10px 20px;text-decoration:none;">
+      Clear
+    </a>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Category filter pills (client-side filter) -->
+{% if results %}
+<div class="otc-filters" id="catFilters">
+  <button class="otc-filter-pill active" data-cat="all" onclick="filterCat(this)">All</button>
+  {% set cats = [] %}
+  {% for item in results %}{% if item.category not in cats %}{% set _ = cats.append(item.category) %}{% endif %}{% endfor %}
+  {% for cat in cats %}
+  <button class="otc-filter-pill" data-cat="{{ cat }}" onclick="filterCat(this)">{{ cat }}</button>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Results header -->
+<div style="margin-bottom:16px;">
+  {% if query %}
+    <div style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;display:flex;align-items:center;gap:8px;">
+      Results for <strong style="color:var(--white);">"{{ query }}"</strong>
+      <span class="ez-tag tag-teal">{{ results|length }} found</span>
+    </div>
+  {% else %}
+    <div style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;">
+      Common Medicines — Click any card for details
+    </div>
+  {% endif %}
+</div>
+
+<!-- Results grid -->
+<div class="otc-grid" id="otcGrid">
+  {% if results %}
+    {% for item in results %}
+    <div class="otc-card" data-cat="{{ item.category }}"
+         style="animation-delay:{{ loop.index0 * 0.04 }}s;">
+      <!-- Safety badge -->
+      {% if item.contraindications %}
+        <span class="safety-score score-danger">⚠ Use with Caution</span>
+      {% elif item.side_effects %}
+        <span class="safety-score score-caution">⚡ Side Effects Noted</span>
+      {% else %}
+        <span class="safety-score score-safe">✓ Generally Safe</span>
+      {% endif %}
+
+      <div class="otc-name">{{ item.name }}</div>
+      <div class="otc-category">{{ item.category }}</div>
+      <div class="otc-desc">{{ item.description }}</div>
+
+      {% if item.side_effects %}
+      <div class="otc-warning-box">⚡ Side Effects: {{ item.side_effects }}</div>
+      {% endif %}
+      {% if item.contraindications %}
+      <div class="otc-danger-box">🚫 Contraindications: {{ item.contraindications }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  {% else %}
+    <div style="grid-column:1/-1;">
+      <div class="empty-state">
+        <span class="empty-state-icon">🔬</span>
+        <h4>No medicines found</h4>
+        <p>Try a different search term or<br>browse all medicines by clearing the search.</p>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+{% block scripts %}
+<script>
+function filterCat(btn) {
+  const cat = btn.dataset.cat;
+  document.querySelectorAll('.otc-filter-pill').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.otc-card').forEach(card => {
+    if (cat === 'all' || card.dataset.cat === cat) {
+      card.style.display = '';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+}
+
+// Keyboard shortcut: / to focus search
+document.addEventListener('keydown', e => {
+  if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+    e.preventDefault();
+    document.getElementById('searchInput')?.focus();
+  }
+});
+</script>
+{% endblock %}

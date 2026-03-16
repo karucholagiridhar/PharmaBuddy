@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Background rounded square -->
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- Heart -->
+  <path d="M32 54C32 54 8 38 8 22C8 14.8 13.4 9 20 9C24.4 9 28.2 11.4 30.4 15L32 17.6L33.6 15C35.8 11.4 39.6 9 44 9C50.6 9 56 14.8 56 22C56 38 32 54 32 54Z"
+    fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.7)" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- ECG line -->
+  <polyline points="4,32 13,32 18,20 23,44 28,32 32,32 36,26 40,38 45,32 60,32"
+    stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#00C9A7"/>
+      <stop offset="100%" stop-color="#0CF2C8"/>
+    </linearGradient>
+  </defs>
+</svg>

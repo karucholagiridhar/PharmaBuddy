@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block page_label %}Profile{% endblock %}
+
+{% block content %}
+<div class="profile-layout">
+
+  <!-- ══ HERO CARD ══ -->
+  <div class="ez-card profile-hero reveal">
+    <div class="profile-avatar-wrap">
+      <div class="profile-avatar-ring" id="avatarRing" onclick="document.getElementById('avatarInput').click()" title="Click to change photo">
+        {% if profile.get('avatar') %}
+          <img src="{{ profile.get('avatar') }}" class="profile-avatar-img" id="avatarPreview" alt="Profile photo">
+        {% else %}
+          <div class="profile-avatar-initials" id="avatarInitials">
+            {{ (profile.get('display_name') or user)[:2].upper() }}
+          </div>
+          <img src="" class="profile-avatar-img" id="avatarPreview" alt="" style="display:none;">
+        {% endif %}
+        <div class="avatar-upload-overlay">📷</div>
+      </div>
+      <input type="file" id="avatarInput" accept="image/*" style="display:none" onchange="handleAvatarUpload(this)">
+      <p class="avatar-hint">Click to upload photo</p>
+    </div>
+    <div class="profile-hero-info">
+      <h2 class="profile-display-name">{{ profile.get('display_name') or user }}</h2>
+      <p class="profile-username">@{{ user }}</p>
+      <p class="profile-joined">
+        Joined {{ profile.get('created_at').strftime('%B %Y') if profile.get('created_at') else 'Recently' }}
+      </p>
+      <div class="profile-badges">
+        <span class="ez-tag tag-teal">{{ prescriptions|length }} Prescription{% if prescriptions|length != 1 %}s{% endif %}</span>
+        <span class="ez-tag" style="background:rgba(139,158,255,0.15);color:var(--indigo);border-color:rgba(139,158,255,0.2);">
+          {{ reminders|length }} Reminder{% if reminders|length != 1 %}s{% endif %}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ SETTINGS + APPEARANCE ══ -->
+  <div class="profile-settings-row">
+
+    <!-- Account Settings -->
+    <div class="ez-card reveal" style="animation-delay:0.05s">
+      <div class="card-head"><div class="card-title-dot"><div class="dot"></div>Account Settings</div></div>
+      <form method="POST" action="{{ url_for('profile') }}" id="profileForm">
+        <input type="hidden" name="theme" id="formTheme" value="{{ profile.get('theme', 'dark') }}">
+
+        <div class="profile-field">
+          <label class="profile-label">Display Name</label>
+          <input type="text" name="display_name" class="ez-input"
+                 value="{{ profile.get('display_name') or '' }}"
+                 placeholder="How should we call you?"
+                 maxlength="40">
+          <p class="field-hint">This name is shown in the top bar and on your profile.</p>
+        </div>
+
+        <div class="profile-field">
+          <label class="profile-label">Language</label>
+          <select name="language" class="ez-input ez-select">
+            {% set lang = profile.get('language', 'en') %}
+            <option value="en"  {% if lang == 'en'  %}selected{% endif %}>🇬🇧 English</option>
+            <option value="hi"  {% if lang == 'hi'  %}selected{% endif %}>🇮🇳 Hindi</option>
+            <option value="ta"  {% if lang == 'ta'  %}selected{% endif %}>🇮🇳 Tamil</option>
+            <option value="es"  {% if lang == 'es'  %}selected{% endif %}>🇪🇸 Spanish</option>
+            <option value="fr"  {% if lang == 'fr'  %}selected{% endif %}>🇫🇷 French</option>
+            <option value="de"  {% if lang == 'de'  %}selected{% endif %}>🇩🇪 German</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn-teal" style="width:100%;margin-top:8px;">Save Changes</button>
+      </form>
+    </div>
+
+    <!-- Appearance -->
+    <div class="ez-card reveal" style="animation-delay:0.1s">
+      <div class="card-head"><div class="card-title-dot"><div class="dot"></div>Appearance</div></div>
+
+      <p class="profile-label" style="margin-bottom:14px;">Color Theme</p>
+      <div class="theme-picker">
+        <button class="theme-option {% if profile.get('theme','dark') == 'dark' %}active{% endif %}"
+                id="btnDark" onclick="setTheme('dark')">
+          <div class="theme-preview dark-preview">
+            <div class="tp-bar"></div><div class="tp-card"></div><div class="tp-card"></div>
+          </div>
+          <span>🌙 Dark</span>
+        </button>
+        <button class="theme-option {% if profile.get('theme','dark') == 'light' %}active{% endif %}"
+                id="btnLight" onclick="setTheme('light')">
+          <div class="theme-preview light-preview">
+            <div class="tp-bar"></div><div class="tp-card"></div><div class="tp-card"></div>
+          </div>
+          <span>☀️ Light</span>
+        </button>
+      </div>
+      <p class="field-hint" style="margin-top:12px;">Theme is applied instantly and saved to your account.</p>
+    </div>
+
+  </div>
+
+  <!-- ══ HISTORY ══ -->
+  <div class="ez-card reveal" style="animation-delay:0.15s">
+    <div class="card-head">
+      <div class="card-title-dot"><div class="dot"></div>Activity History</div>
+      <div class="history-tabs">
+        <button class="hist-tab active" onclick="switchTab(this,'tab-rx')">📋 Prescriptions</button>
+        <button class="hist-tab" onclick="switchTab(this,'tab-med')">💊 Medications</button>
+      </div>
+    </div>
+
+    <!-- Prescriptions Tab -->
+    <div id="tab-rx" class="hist-content">
+      {% if prescriptions %}
+        <div class="hist-list">
+          {% for p in prescriptions %}
+          <div class="hist-item">
+            <div class="hist-icon">📄</div>
+            <div class="hist-body">
+              <div class="hist-title">{{ p.title }}</div>
+              <div class="hist-sub">Prescription · <a href="{{ url_for('dashboard', view=p.id) }}" class="hist-link">View →</a></div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-state-icon">📄</span>
+          <h4>No prescriptions yet</h4>
+          <p>Upload your first prescription from the Dashboard.</p>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Medications Tab -->
+    <div id="tab-med" class="hist-content" style="display:none">
+      {% if reminders %}
+        <div class="hist-list">
+          {% for r in reminders %}
+          <div class="hist-item">
+            <div class="hist-icon">💊</div>
+            <div class="hist-body">
+              <div class="hist-title">{{ r.medicine_name }} <span class="hist-dose">{{ r.dosage }}</span></div>
+              <div class="hist-sub">
+                {{ r.frequency }} · {{ r.times|join(', ') }}
+                <span class="ez-tag {% if r.is_active %}tag-teal{% else %}tag-muted{% endif %}" style="margin-left:8px;font-size:10px;padding:2px 8px;">
+                  {{ 'Active' if r.is_active else 'Ended' }}
+                </span>
+              </div>
+            </div>
+            <div class="hist-meta">{{ r.start_date }} → {{ r.end_date }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-state-icon">💊</span>
+          <h4>No medications scheduled</h4>
+          <p>Add your first reminder from the Medications tab.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ══ LOGOUT ══ -->
+  <div class="ez-card reveal" style="animation-delay:0.2s;padding:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:4px;">Sign Out</div>
+        <div style="font-size:13px;color:var(--muted);">You'll be redirected to the login page.</div>
+      </div>
+      <a href="{{ url_for('logout') }}" class="btn-danger-outline">🚪 Logout</a>
+    </div>
+  </div>
+
+</div><!-- end profile-layout -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Avatar upload ──────────────────────────────────────────────
+function handleAvatarUpload(input) {
+  if (!input.files || !input.files[0]) return;
+  const file = input.files[0];
+  if (file.size > 2 * 1024 * 1024) {
+    alert('Please choose an image smaller than 2MB.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const dataUri = e.target.result;
+    // Compress via canvas
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.createElement('canvas');
+      const maxSide = 200;
+      let w = img.width, h = img.height;
+      if (w > h) { h = Math.round(h * maxSide / w); w = maxSide; }
+      else        { w = Math.round(w * maxSide / h); h = maxSide; }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.82);
+      // Preview immediately
+      const preview = document.getElementById('avatarPreview');
+      const initials = document.getElementById('avatarInitials');
+      if (preview) { preview.src = compressed; preview.style.display = 'block'; }
+      if (initials) initials.style.display = 'none';
+      // Save to server
+      fetch('/api/profile/avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatar: compressed })
+      }).then(r => r.json()).then(d => {
+        if (d.success) showFlash('Profile photo updated!', 'success');
+        else showFlash(d.error || 'Upload failed.', 'danger');
+      });
+    };
+    img.src = dataUri;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── Theme toggle ───────────────────────────────────────────────
+function setTheme(theme) {
+  document.body.setAttribute('data-theme', theme);
+  document.getElementById('formTheme').value = theme;
+  document.getElementById('btnDark').classList.toggle('active', theme === 'dark');
+  document.getElementById('btnLight').classList.toggle('active', theme === 'light');
+  fetch('/api/profile/theme', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ theme })
+  });
+}
+
+// ── History tabs ───────────────────────────────────────────────
+function switchTab(btn, tabId) {
+  document.querySelectorAll('.hist-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.hist-content').forEach(c => c.style.display = 'none');
+  btn.classList.add('active');
+  document.getElementById(tabId).style.display = 'block';
+}
+
+// ── Inline flash helper ─────────────────────────────────────────
+function showFlash(msg, type) {
+  const c = document.createElement('div');
+  c.className = 'flash-toast ' + type;
+  c.innerHTML = `<span>${type === 'success' ? '✅' : '❌'}</span><span>${msg}</span>
+    <button class="flash-close" onclick="this.parentElement.remove()">×</button>`;
+  let container = document.getElementById('flashContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'flash-container';
+    container.id = 'flashContainer';
+    document.body.appendChild(container);
+  }
+  container.appendChild(c);
+  setTimeout(() => { c.style.opacity = '0'; setTimeout(() => c.remove(), 400); }, 3500);
+}
+</script>
+{% endblock %}
