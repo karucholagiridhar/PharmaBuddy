@@ -68,9 +68,22 @@
           <span class="ez-switch-slider"></span>
         </label>
       </div>
-      <div id="notification_email_info" style="display:none;font-size:12px;color:#00C9A7;margin-top:4px;padding:0 4px;">
-        ✅ Reminder will be sent to <strong>{{ user_email }}</strong>
-        <input type="hidden" name="notification_email" value="{{ user_email }}">
+      <div id="notification_email_info" style="display:none;margin-top:8px;">
+        {% if user_email %}
+          <div style="font-size:12px;color:#00C9A7;padding:0 4px;">
+            ✅ Reminder will be sent to <strong>{{ user_email }}</strong>
+          </div>
+          <input type="hidden" name="notification_email" value="{{ user_email }}">
+        {% else %}
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;padding:0 4px;">
+            📧 Enter your email to receive reminders:
+          </div>
+          <input type="email" name="notification_email" id="notification_email_input"
+                 class="ez-input" placeholder="your@email.com" style="font-size:13px;">
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;padding:0 4px;">
+            This will be saved to your profile for future reminders.
+          </div>
+        {% endif %}
       </div>
       <div class="ez-switch-row">
         <span class="ez-switch-label">📅 Sync to Google Calendar</span>

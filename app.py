@@ -340,6 +340,11 @@ def medications():
                 
                 if res['success']:
                     flash("Medication schedule added successfully!", "success")
+                    # Save email to profile if user provided one and none is saved yet
+                    provided_email = form_data['notification_email']
+                    if provided_email and not session.get('email'):
+                        auth_manager.update_user_profile(session['user'], {'email': provided_email})
+                        session['email'] = provided_email
                     
                     if form_data['calendar_sync']:
                         from utils.calendar_integration import CalendarIntegration
