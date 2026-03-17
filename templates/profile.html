@@ -95,6 +95,30 @@
       <p class="field-hint" style="margin-top:12px;">Theme is applied instantly and saved to your account.</p>
     </div>
 
+    <!-- Change Password -->
+    <div class="ez-card reveal" style="animation-delay:0.15s">
+      <div class="card-head"><div class="card-title-dot"><div class="dot"></div>Change Password</div></div>
+      <form method="POST" action="{{ url_for('profile') }}">
+        <input type="hidden" name="action" value="change_password">
+        <div class="profile-field">
+          <label class="profile-label">Current Password</label>
+          <input type="password" name="current_password" class="ez-input"
+                 placeholder="Enter your current password" required>
+        </div>
+        <div class="profile-field">
+          <label class="profile-label">New Password</label>
+          <input type="password" name="new_password" class="ez-input"
+                 placeholder="Min. 8 characters" required minlength="8">
+        </div>
+        <div class="profile-field">
+          <label class="profile-label">Confirm New Password</label>
+          <input type="password" name="confirm_password" class="ez-input"
+                 placeholder="Repeat new password" required minlength="8">
+        </div>
+        <button type="submit" class="btn-teal" style="width:100%;margin-top:8px;">🔒 Update Password</button>
+      </form>
+    </div>
+
   </div>
 
   <!-- ══ HISTORY ══ -->

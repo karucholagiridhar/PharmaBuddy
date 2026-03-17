@@ -38,13 +38,15 @@ class SchedulerService:
 
             for reminder in due_reminders:
                 recipient = reminder.get('notification_email')
-                if recipient:
+                matched_time = reminder.get('current_match_time', '')
+                if recipient and matched_time:
                     self.mail_svc.send_dose_reminder(
                         recipient,
                         reminder['medicine_name'],
                         reminder['dosage'],
                         reminder.get('instructions', ''),
-                        reminder.get('current_match_time', 'NOW')
+                        matched_time
                     )
+                    self.reminder_mgr.mark_notification_sent(reminder['_id'], matched_time)
         except Exception as e:
             logger.error(f"Scheduler Job Error: {e}")

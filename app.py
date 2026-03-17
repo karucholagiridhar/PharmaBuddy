@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import os
 import uuid
+import threading
 from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
@@ -436,21 +437,21 @@ def update_medication_status():
 def email_report():
     data = request.json
     email = data.get('email')
-    
+
     if not email:
         return jsonify({'error': 'Email required'}), 400
-        
-    try:
-        stats = reminder_manager.get_adherence_stats(session['user'])
-        success, msg = mail_service.send_performance_report(email, stats)
-        
-        if success:
-            return jsonify({'success': True, 'message': msg})
-        else:
-            return jsonify({'success': False, 'message': f'Failed to send report: {msg}'}), 500
-    except Exception as e:
-        logger.error(f"Email Report Error: {e}")
-        return jsonify({'error': str(e)}), 500
+
+    user = session['user']
+
+    def _send():
+        try:
+            stats = reminder_manager.get_adherence_stats(user)
+            mail_service.send_performance_report(email, stats)
+        except Exception as e:
+            logger.error(f"Email Report Error for {user}: {e}")
+
+    threading.Thread(target=_send, daemon=True).start()
+    return jsonify({'success': True, 'message': 'Report is being prepared and will be sent shortly.'})
 
 @app.route('/pharmacy')
 @login_required
@@ -538,6 +539,24 @@ def safety():
 def profile():
     user = session['user']
     if request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'change_password':
+            current_pw = request.form.get('current_password', '')
+            new_pw = request.form.get('new_password', '')
+            confirm_pw = request.form.get('confirm_password', '')
+            if not all([current_pw, new_pw, confirm_pw]):
+                flash("All password fields are required.", "danger")
+            elif new_pw != confirm_pw:
+                flash("New passwords do not match.", "danger")
+            elif len(new_pw) < 8:
+                flash("New password must be at least 8 characters.", "danger")
+            else:
+                ok, msg = auth_manager.change_password(user, current_pw, new_pw)
+                flash(msg, "success" if ok else "danger")
+            return redirect(url_for('profile'))
+
+        # Default: save profile settings
         updates = {}
         display_name = request.form.get('display_name', '').strip()
         language = request.form.get('language', 'en')

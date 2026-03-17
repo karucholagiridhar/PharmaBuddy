@@ -51,3 +51,12 @@ class AuthManager:
             return False
         self.users.update_one({"username": username}, {"$set": safe})
         return True
+
+    def change_password(self, username: str, current_password: str, new_password: str) -> tuple:
+        user = self.users.find_one({"username": username})
+        if not user or not bcrypt.checkpw(current_password.encode('utf-8'), user['password_hash']):
+            return False, "Current password is incorrect."
+        new_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
+        self.users.update_one({"username": username}, {"$set": {"password_hash": new_hash}})
+        logger.info(f"Password changed for user: {username}")
+        return True, "Password changed successfully."

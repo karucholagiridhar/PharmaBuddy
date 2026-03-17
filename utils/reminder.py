@@ -20,6 +20,7 @@ class ReminderManager:
         self.reminders.create_index([("user_id", 1), ("is_active", 1), ("start_date", 1), ("end_date", 1)], background=True)
         self.adherence.create_index([("user_id", 1), ("date", 1), ("status", 1)], background=True)
         self.adherence.create_index([("user_id", 1), ("medicine_name", 1), ("date", 1), ("scheduled_time", 1)], background=True)
+        self.db['email_notifications'].create_index([("reminder_id", 1), ("date", 1), ("scheduled_time", 1)], background=True)
     
     def add_reminder(
         self,
@@ -377,26 +378,60 @@ class ReminderManager:
 
     def check_due_reminders(self) -> List[Dict]:
         """
-        Check for reminders that are due within the next few minutes 
-        and haven't been notified yet (or simply return due ones for now).
-        This is intended for background scheduling.
+        Check for reminders due now (with ±1 minute tolerance) that haven't
+        been notified yet today. Returns list of due reminders enriched with
+        a 'current_match_time' field indicating which scheduled time matched.
         """
         try:
             now = datetime.now()
-            current_time = now.strftime("%H:%M")
             today = now.date().isoformat()
-            
-            # Find active reminders valid for today
+
+            # Use current minute + previous minute to handle scheduler timing drift
+            current_time = now.strftime("%H:%M")
+            prev_time = (now - timedelta(minutes=1)).strftime("%H:%M")
+            times_to_check = [current_time, prev_time]
+
             active_reminders = list(self.reminders.find({
                 "is_active": True,
                 "email_notification": True,
                 "start_date": {"$lte": today},
                 "end_date": {"$gte": today},
-                "times": current_time
+                "times": {"$in": times_to_check}
             }))
-            
-            return active_reminders
-            
+
+            # Fetch already-sent notifications for today to avoid duplicates
+            sent_cursor = self.db['email_notifications'].find(
+                {"date": today},
+                {"reminder_id": 1, "scheduled_time": 1, "_id": 0}
+            )
+            notified_set = {(doc["reminder_id"], doc["scheduled_time"]) for doc in sent_cursor}
+
+            due = []
+            for reminder in active_reminders:
+                rid = str(reminder['_id'])
+                # Find the earliest matching time that hasn't been notified yet
+                for t in times_to_check:
+                    if t in reminder.get('times', []) and (rid, t) not in notified_set:
+                        r = dict(reminder)
+                        r['_id'] = rid
+                        r['current_match_time'] = t
+                        due.append(r)
+                        break  # One notification per reminder per scheduler run
+
+            return due
+
         except Exception as e:
             logger.error(f"Error checking due reminders: {str(e)}")
             return []
+
+    def mark_notification_sent(self, reminder_id: str, scheduled_time: str):
+        """Record that an email notification was sent to prevent duplicate sends."""
+        try:
+            self.db['email_notifications'].insert_one({
+                "reminder_id": reminder_id,
+                "scheduled_time": scheduled_time,
+                "date": datetime.now().date().isoformat(),
+                "sent_at": datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Error recording notification sent: {str(e)}")

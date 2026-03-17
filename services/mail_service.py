@@ -63,7 +63,7 @@ class MailService:
 
         # Run in background thread
         import threading
-        threading.Thread(target=_send).start()
+        threading.Thread(target=_send, daemon=True).start()
         return True, "Email queued for sending"
 
     def send_performance_report(self, to_email, stats):
@@ -152,5 +152,5 @@ class MailService:
 
         # Run in background thread
         import threading
-        threading.Thread(target=_send).start()
+        threading.Thread(target=_send, daemon=True).start()
         return True, "Report queued for sending"
