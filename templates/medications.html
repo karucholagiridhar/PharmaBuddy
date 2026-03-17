@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const confirmBtnEl = document.getElementById('confirmBtn');
     confirmBtnEl.disabled = true;
     confirmModal.hide();
-    const { action, name, time, doseItem } = pendingAction;
+    const { action, name, time, btnContainer } = pendingAction;
     try {
       const res  = await fetch('/api/medication/status', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -292,9 +292,8 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       const data = await res.json();
       if (data.success) {
-        const btnDiv = doseItem ? doseItem.querySelector('div[style*="flex-shrink"]') : null;
-        if (btnDiv) {
-          btnDiv.outerHTML = action === 'taken'
+        if (btnContainer) {
+          btnContainer.outerHTML = action === 'taken'
             ? '<span class="ez-tag tag-success">✓ Taken</span>'
             : '<span class="ez-tag tag-muted">✕ Skipped</span>';
         }
@@ -333,7 +332,7 @@ function showAlert(title, msg) {
 }
 
 function markStatus(action, name, time, btn) {
-  pendingAction = { action, name, time, doseItem: btn ? btn.closest('.dose-item') : null };
+  pendingAction = { action, name, time, btnContainer: btn ? btn.parentElement : null };
   const msg = action === 'taken'
     ? `Mark <strong>${name}</strong> as taken at ${time}?`
     : `Skip <strong>${name}</strong> at ${time}?`;
