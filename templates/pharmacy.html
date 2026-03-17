@@ -21,6 +21,10 @@
     40%,80% { transform: translateX(6px); }
   }
   .input-shake { animation: inputShake 0.35s ease; border-color: #e05c5c !important; }
+  @keyframes userPulse {
+    0%, 100% { transform: scale(1);   opacity: 0.6; }
+    50%       { transform: scale(1.5); opacity: 0; }
+  }
 </style>
 {% endblock %}
 {% block content %}
@@ -112,6 +116,30 @@
 <script>
 let map = null, markers = [], userMarker = null, gpsInProgress = false;
 
+/* ── Custom map icons ─────────────────────────────────────────── */
+function makePharmacyIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:32px;height:32px;border-radius:50%;background:#00C9A7;border:2.5px solid #0A1628;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 3px 10px rgba(0,0,0,0.45);cursor:pointer;">💊</div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -18]
+  });
+}
+
+function makeUserIcon() {
+  return L.divIcon({
+    className: '',
+    html: `<div style="width:20px;height:20px;border-radius:50%;background:#FF6B6B;border:3px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,0.5);">
+             <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,107,107,0.25);position:absolute;top:-11px;left:-11px;animation:userPulse 1.6s ease-in-out infinite;"></div>
+           </div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+    popupAnchor: [0, -14]
+  });
+}
+
+/* ── Helpers ──────────────────────────────────────────────────── */
 function setStatus(text, state = '') {
   const bar = document.getElementById('statusBar');
   const txt = document.getElementById('statusText');
@@ -133,7 +161,8 @@ function clearSearch() {
 function initMap() {
   map = L.map('map').setView([20.5937, 78.9629], 5);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
   }).addTo(map);
 }
 
@@ -146,13 +175,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('useGpsBtn').addEventListener('click', () => { gpsModal.hide(); searchGPS(); });
     window.gpsPromptModal = gpsModal;
 
-    // When modal is dismissed without choosing GPS, restore status and clean up any stray backdrop
     gpsModalEl.addEventListener('hidden.bs.modal', () => {
       document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
       document.body.classList.remove('modal-open');
       document.body.style.removeProperty('overflow');
       document.body.style.removeProperty('padding-right');
-      // Only reset to default if no specific error/search is active
       const bar = document.getElementById('statusBar');
       if (!gpsInProgress && !bar.classList.contains('searching') && !bar.classList.contains('error')) {
         setStatus('Enter a location or use GPS to search', '');
@@ -168,6 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+/* ── GPS search ───────────────────────────────────────────────── */
 function searchGPS() {
   if (gpsInProgress) { setStatus('GPS request already in progress...'); return; }
   if (!navigator.geolocation) { setStatus('Geolocation not supported.', 'error'); return; }
@@ -194,6 +222,7 @@ function searchGPS() {
   }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 0 });
 }
 
+/* ── Address search ───────────────────────────────────────────── */
 function searchLocation() {
   const input = document.getElementById('locationInput');
   const loc = input.value.trim();
@@ -201,7 +230,7 @@ function searchLocation() {
     setStatus('Please enter a location name first.', 'error');
     input.focus();
     input.classList.remove('input-shake');
-    void input.offsetWidth; // reflow to restart animation
+    void input.offsetWidth;
     input.classList.add('input-shake');
     setTimeout(() => input.classList.remove('input-shake'), 400);
     return;
@@ -209,8 +238,9 @@ function searchLocation() {
   executeSearch({ location: loc });
 }
 
+/* ── Main search ──────────────────────────────────────────────── */
 async function executeSearch(payload) {
-  const list    = document.getElementById('resultsList');
+  const list      = document.getElementById('resultsList');
   const searchBtn = document.getElementById('searchBtn');
   payload.radius  = document.getElementById('radius').value;
 
@@ -218,15 +248,15 @@ async function executeSearch(payload) {
   searchBtn.classList.add('btn-loading');
   searchBtn.disabled = true;
 
-  // Skeleton loading
   list.innerHTML = [1,2,3].map(() => `
     <div style="padding:12px;margin-bottom:8px;">
       <div class="skeleton skel-line" style="width:70%;margin-bottom:6px;"></div>
-      <div class="skeleton skel-line" style="width:90%;"></div>
+      <div class="skeleton skel-line" style="width:90%;margin-bottom:6px;"></div>
+      <div class="skeleton skel-line" style="width:45%;"></div>
     </div>`).join('');
 
   try {
-    const res  = await fetch('/api/pharmacy/search', {
+    const res = await fetch('/api/pharmacy/search', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload)
     });
@@ -236,9 +266,13 @@ async function executeSearch(payload) {
     const center  = data.center;
     if (!center || typeof center.lat !== 'number') throw new Error('Invalid location');
 
+    // Place user location marker
     map.setView([center.lat, center.lng], 14);
     if (userMarker) map.removeLayer(userMarker);
-    userMarker = L.marker([center.lat, center.lng]).addTo(map).bindPopup('<b>Your search location</b>').openPopup();
+    userMarker = L.marker([center.lat, center.lng], { icon: makeUserIcon(), zIndexOffset: 1000 })
+      .addTo(map)
+      .bindPopup('<div style="font-family:\'Syne\',sans-serif;font-weight:700;color:#FF6B6B;">📍 Your Location</div>')
+      .openPopup();
     markers.forEach(m => map.removeLayer(m)); markers = [];
     list.innerHTML = '';
 
@@ -252,38 +286,61 @@ async function executeSearch(payload) {
         const lat = parseFloat(p.latitude), lng = parseFloat(p.longitude);
         if (isNaN(lat) || isNaN(lng)) return;
 
+        // Safely escape text content
         const nameEl = document.createElement('div'); nameEl.textContent = p.name;
         const addrEl = document.createElement('div'); addrEl.textContent = p.address;
         const safeName = nameEl.innerHTML, safeAddr = addrEl.innerHTML;
         const distKm   = (p.distance / 1000).toFixed(1);
-        const originParam = center ? `&origin=${center.lat},${center.lng}` : '';
+
+        // Phone HTML
+        const hasPhone = p.phone && p.phone !== 'N/A';
+        const phoneHtml = hasPhone
+          ? `<div style="font-size:11px;color:var(--teal);margin-bottom:4px;">
+               📞 <a href="tel:${p.phone}" style="color:var(--teal);text-decoration:none;" onclick="event.stopPropagation()">${p.phone}</a>
+             </div>`
+          : '';
+
+        // Opening hours HTML
+        const hasHours = p.is_open_now && p.is_open_now !== 'N/A' && p.is_open_now !== 'True' && p.is_open_now !== 'False';
+        const hoursHtml = hasHours
+          ? `<div style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:6px;">🕐 ${p.is_open_now}</div>`
+          : '';
+
+        // OSM directions link
+        const osmNav = `https://www.openstreetmap.org/directions?engine=osrm_car&route=${center.lat},${center.lng};${lat},${lng}`;
 
         const itemDiv = document.createElement('div');
         itemDiv.className = 'pharm-item';
         itemDiv.style.animationDelay = (idx * 0.05) + 's';
-        itemDiv.onclick = () => focusOnMap(lat, lng);
+        itemDiv.onclick = () => focusOnMap(lat, lng, idx);
         itemDiv.innerHTML = `
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;">
             <div class="pharm-name">${safeName}</div>
             <span class="ez-tag tag-teal" style="flex-shrink:0;margin-left:8px;">${distKm} km</span>
           </div>
           <div class="pharm-addr">📍 ${safeAddr}</div>
-          <a href="https://www.google.com/maps/dir/?api=1${originParam}&destination=${lat},${lng}"
-             target="_blank" class="btn-ghost" style="font-size:11px;padding:4px 12px;margin-top:6px;"
+          ${phoneHtml}${hoursHtml}
+          <a href="${osmNav}" target="_blank" rel="noopener"
+             class="btn-ghost" style="font-size:11px;padding:4px 12px;margin-top:4px;"
              onclick="event.stopPropagation()">🧭 Navigate</a>`;
         list.appendChild(itemDiv);
 
-        const marker = L.marker([lat, lng]).addTo(map).bindPopup(`
-          <div style="font-family:'Syne',sans-serif;min-width:160px;">
-            <div style="font-weight:700;font-size:13px;color:#00C9A7;margin-bottom:4px;">${safeName}</div>
-            <div style="font-size:11px;color:#8892B0;margin-bottom:8px;">${safeAddr}</div>
-            <a href="https://www.google.com/maps/dir/?api=1${originParam}&destination=${lat},${lng}"
-               target="_blank" style="display:block;background:#00C9A7;color:#0A1628;padding:6px;border-radius:6px;text-align:center;font-size:12px;font-weight:700;text-decoration:none;">🧭 Navigate</a>
-          </div>`);
+        // Pharmacy marker on map
+        const marker = L.marker([lat, lng], { icon: makePharmacyIcon() })
+          .addTo(map)
+          .bindPopup(`
+            <div style="font-family:'Syne',sans-serif;min-width:170px;">
+              <div style="font-weight:700;font-size:13px;color:#00C9A7;margin-bottom:4px;">${safeName}</div>
+              <div style="font-size:11px;color:#8892B0;margin-bottom:4px;">${safeAddr}</div>
+              ${hasPhone ? `<div style="font-size:11px;color:#00C9A7;margin-bottom:8px;">📞 ${p.phone}</div>` : ''}
+              <a href="${osmNav}" target="_blank" rel="noopener"
+                 style="display:block;background:#00C9A7;color:#0A1628;padding:6px;border-radius:6px;text-align:center;font-size:12px;font-weight:700;text-decoration:none;">🧭 Navigate</a>
+            </div>`);
         markers.push(marker);
         bounds.extend([lat, lng]);
       });
-      if (results.length > 1) map.fitBounds(bounds, {padding: [50,50]});
+
+      if (results.length > 1) map.fitBounds(bounds, { padding: [50, 50] });
       setStatus(`Found ${results.length} pharmacies in range`, 'found');
     } else {
       list.innerHTML = '<div class="empty-state" style="padding:32px;"><span class="empty-state-icon" style="font-size:32px;">🔍</span><p>No pharmacies found. Try a larger radius.</p></div>';
@@ -298,11 +355,9 @@ async function executeSearch(payload) {
   }
 }
 
-function focusOnMap(lat, lng) {
+function focusOnMap(lat, lng, idx) {
   map.setView([lat, lng], 16);
-  markers.forEach(m => {
-    if (Math.abs(m.getLatLng().lat - lat) < 0.0001 && Math.abs(m.getLatLng().lng - lng) < 0.0001) m.openPopup();
-  });
+  if (markers[idx]) markers[idx].openPopup();
 }
 </script>
 {% endblock %}
