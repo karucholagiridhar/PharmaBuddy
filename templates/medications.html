@@ -130,9 +130,9 @@
             {% else %}
               <div style="display:flex;gap:6px;flex-shrink:0;">
                 <button class="btn-ghost" style="padding:5px 12px;font-size:11px;"
-                        onclick="markStatus('taken','{{ dose.medicine_name }}','{{ dose.time }}')">✓ Taken</button>
+                        onclick="markStatus('taken','{{ dose.medicine_name }}','{{ dose.time }}',this)">✓ Taken</button>
                 <button class="btn-danger-ghost" style="padding:5px 12px;font-size:11px;"
-                        onclick="markStatus('skipped','{{ dose.medicine_name }}','{{ dose.time }}')">✕ Skip</button>
+                        onclick="markStatus('skipped','{{ dose.medicine_name }}','{{ dose.time }}',this)">✕ Skip</button>
               </div>
             {% endif %}
           </div>
@@ -196,7 +196,7 @@
         <div style="display:flex;gap:8px;">
           <input type="email" id="report-email" class="ez-input"
                  placeholder="your@email.com" value="{{ user_email or '' }}">
-          <button class="btn-teal" onclick="sendReport()" style="white-space:nowrap;padding:10px 16px;flex-shrink:0;">
+          <button class="btn-teal" onclick="sendReport(this)" style="white-space:nowrap;padding:10px 16px;flex-shrink:0;">
             <span class="btn-label">📤 Send</span>
             <span class="btn-spinner"></span>
           </button>
@@ -280,8 +280,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
   document.getElementById('confirmBtn').addEventListener('click', async () => {
     if (!pendingAction) return;
+    const confirmBtnEl = document.getElementById('confirmBtn');
+    confirmBtnEl.disabled = true;
     confirmModal.hide();
-    const { action, name, time } = pendingAction;
+    const { action, name, time, doseItem } = pendingAction;
     try {
       const res  = await fetch('/api/medication/status', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -289,9 +291,17 @@ document.addEventListener('DOMContentLoaded', function() {
           reason: action === 'skipped' ? 'User skipped' : '' })
       });
       const data = await res.json();
-      if (data.success) { location.reload(); }
-      else { showAlert('Error', data.error || 'Unknown error'); }
+      if (data.success) {
+        const btnDiv = doseItem ? doseItem.querySelector('div[style*="flex-shrink"]') : null;
+        if (btnDiv) {
+          btnDiv.outerHTML = action === 'taken'
+            ? '<span class="ez-tag tag-success">✓ Taken</span>'
+            : '<span class="ez-tag tag-muted">✕ Skipped</span>';
+        }
+        pendingAction = null;
+      } else { showAlert('Error', data.error || 'Unknown error'); }
     } catch(e) { showAlert('Error', 'Failed to update status'); }
+    finally { confirmBtnEl.disabled = false; }
   });
 
   // Animate adherence ring
@@ -322,8 +332,8 @@ function showAlert(title, msg) {
   infoModal.show();
 }
 
-function markStatus(action, name, time) {
-  pendingAction = { action, name, time };
+function markStatus(action, name, time, btn) {
+  pendingAction = { action, name, time, doseItem: btn ? btn.closest('.dose-item') : null };
   const msg = action === 'taken'
     ? `Mark <strong>${name}</strong> as taken at ${time}?`
     : `Skip <strong>${name}</strong> at ${time}?`;
@@ -331,11 +341,11 @@ function markStatus(action, name, time) {
   confirmModal.show();
 }
 
-async function sendReport() {
+async function sendReport(btn) {
   const email = document.getElementById('report-email').value;
   if (!email) { showAlert('Input Required', 'Please enter an email address'); return; }
-  const btn = event.currentTarget;
   btn.classList.add('btn-loading');
+  btn.disabled = true;
   try {
     const res  = await fetch('/api/report/email', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -345,16 +355,10 @@ async function sendReport() {
     if (data.success) { showAlert('Success ✅', 'Report sent successfully!'); }
     else              { showAlert('Error', data.message); }
   } catch(e) { showAlert('Error', 'Failed to send report. Try again.'); }
-  finally    { btn.classList.remove('btn-loading'); }
+  finally    { btn.classList.remove('btn-loading'); btn.disabled = false; }
 }
 function toggleEmailInfo(checkbox) {
   document.getElementById('notification_email_info').style.display = checkbox.checked ? 'block' : 'none';
 }
-// Auto-start scheduler if any reminder already has notifications enabled
-document.addEventListener('DOMContentLoaded', () => {
-  if (Notification.permission === 'granted' && todaysDoses.length > 0) {
-    startNotificationScheduler();
-  }
-});
 </script>
 {% endblock %}
