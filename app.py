@@ -432,6 +432,20 @@ def update_medication_status():
         logger.error(f"Status Update Error: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/reminder/delete', methods=['POST'])
+@login_required
+def delete_reminder_route():
+    data = request.json
+    reminder_id = data.get('reminder_id')
+    if not reminder_id:
+        return jsonify({'error': 'Reminder ID required'}), 400
+    try:
+        res = reminder_manager.delete_reminder(reminder_id)
+        return jsonify(res)
+    except Exception as e:
+        logger.error(f"Delete Reminder Error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/report/email', methods=['POST'])
 @login_required
 def email_report():

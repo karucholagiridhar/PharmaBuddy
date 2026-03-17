@@ -214,7 +214,7 @@
       <div class="collapse show" id="activeList">
         {% if reminders %}
           {% for r in reminders %}
-          <div style="padding:14px 20px;border-bottom:1px solid var(--border);transition:background 0.2s;"
+          <div id="rem-{{ r._id }}" style="padding:14px 20px;border-bottom:1px solid var(--border);transition:opacity 0.3s ease,max-height 0.35s ease,padding 0.3s ease;"
                onmouseenter="this.style.background='rgba(0,201,167,0.03)'"
                onmouseleave="this.style.background=''">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -223,7 +223,11 @@
                 <span style="font-weight:700;font-size:13px;color:var(--teal);">{{ r.medicine_name }}</span>
                 <span class="ez-tag tag-muted">{{ r.dosage }}</span>
               </div>
-              <span class="ez-tag tag-teal">{{ r.frequency }}</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="ez-tag tag-teal">{{ r.frequency }}</span>
+                <button class="btn-danger-ghost" style="padding:4px 10px;font-size:11px;"
+                        onclick="deleteReminder('{{ r._id }}', document.getElementById('rem-{{ r._id }}'))">🗑 Delete</button>
+              </div>
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;padding-left:16px;">
               {% for time in r.times %}<span class="ez-tag tag-indigo">⏰ {{ time }}</span>{% endfor %}
@@ -283,23 +287,47 @@ document.addEventListener('DOMContentLoaded', function() {
     const confirmBtnEl = document.getElementById('confirmBtn');
     confirmBtnEl.disabled = true;
     confirmModal.hide();
-    const { action, name, time, btnContainer } = pendingAction;
+    const { action } = pendingAction;
     try {
-      const res  = await fetch('/api/medication/status', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ action, medicine_name: name, scheduled_time: time,
-          reason: action === 'skipped' ? 'User skipped' : '' })
-      });
-      const data = await res.json();
-      if (data.success) {
-        if (btnContainer) {
-          btnContainer.outerHTML = action === 'taken'
-            ? '<span class="ez-tag tag-success">✓ Taken</span>'
-            : '<span class="ez-tag tag-muted">✕ Skipped</span>';
-        }
-        pendingAction = null;
-      } else { showAlert('Error', data.error || 'Unknown error'); }
-    } catch(e) { showAlert('Error', 'Failed to update status'); }
+      if (action === 'delete') {
+        const { reminderId, rowEl } = pendingAction;
+        const res  = await fetch('/api/reminder/delete', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ reminder_id: reminderId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (rowEl) {
+            rowEl.style.overflow = 'hidden';
+            rowEl.style.maxHeight = rowEl.offsetHeight + 'px';
+            rowEl.style.opacity   = '0';
+            requestAnimationFrame(() => {
+              rowEl.style.maxHeight      = '0';
+              rowEl.style.paddingTop     = '0';
+              rowEl.style.paddingBottom  = '0';
+            });
+            setTimeout(() => rowEl.remove(), 380);
+          }
+          pendingAction = null;
+        } else { showAlert('Error', data.error || 'Failed to delete reminder'); }
+      } else {
+        const { name, time, btnContainer } = pendingAction;
+        const res  = await fetch('/api/medication/status', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ action, medicine_name: name, scheduled_time: time,
+            reason: action === 'skipped' ? 'User skipped' : '' })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (btnContainer) {
+            btnContainer.outerHTML = action === 'taken'
+              ? '<span class="ez-tag tag-success">✓ Taken</span>'
+              : '<span class="ez-tag tag-muted">✕ Skipped</span>';
+          }
+          pendingAction = null;
+        } else { showAlert('Error', data.error || 'Unknown error'); }
+      }
+    } catch(e) { showAlert('Error', 'Action failed. Please try again.'); }
     finally { confirmBtnEl.disabled = false; }
   });
 
@@ -337,6 +365,13 @@ function markStatus(action, name, time, btn) {
     ? `Mark <strong>${name}</strong> as taken at ${time}?`
     : `Skip <strong>${name}</strong> at ${time}?`;
   document.getElementById('confirmMsg').innerHTML = msg;
+  confirmModal.show();
+}
+
+function deleteReminder(reminderId, rowEl) {
+  pendingAction = { action: 'delete', reminderId, rowEl };
+  document.getElementById('confirmMsg').innerHTML =
+    `Delete this medication reminder?<br><span style="font-size:11px;color:var(--muted);">This cannot be undone.</span>`;
   confirmModal.show();
 }
 
